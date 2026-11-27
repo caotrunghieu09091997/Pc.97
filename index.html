@@ -1,0 +1,128 @@
+</section>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const codes="VCB CTG BIDV MB VP TP LP TCB MSB SHB ACB STB HDB VIB NAB ABB BAB BVB KLB NCB PGB SGB VAB VBB PV GP VIKKI MBV NEO SCB BAOVIET KB KIS SSI KAFI".split(" ");
+let rows=codes.map((code,i)=>({code,price:15+i*2,qty:0}));
+let history=[];
+let filter=false,showPrice=false;
+try{
+const s=JSON.parse(localStorage.getItem("pc97pro"));
+if(s){rows=s.rows;history=s.history||[]}
+}catch(e){}
+function save(){
+try{localStorage.setItem("pc97pro",JSON.stringify({rows,history}))}catch(e){}
+}
+const money=n=>n.toLocaleString("vi-VN")+"đ";
+function parse(line){
+let s=line.trim().toUpperCase();
+let m=s.match(/^([A-Z]+)\s*[:x×-]?\s*(\d+)$/);
+let code,qty;
+if(m){code=m[1];qty=Number(m[2])}
+else{
+m=s.match(/^(\d+)\s*[:X×-]?\s*([A-Z]+)$/);
+if(!m)return null;
+qty=Number(m[1]);code=m[2];
+}
+return codes.includes(code)&&Number.isSafeInteger(qty)&&qty>0?{code,qty}:null;
+}
+function escapeHtml(s){
+return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function check(){
+let good=0,bad=0;
+let lines=$("editor").value.split("\n");
+$("paint").innerHTML=lines.map(line=>{
+let p=parse(line);
+if(p)good+=p.qty;
+else if(line.trim())bad++;
+return '<span class="'+(p?"good":"bad")+'">'+escapeHtml(line)+'</span>';
+}).join("\n")+"\n";
+$("valid").textContent=good;
+$("invalid").textContent=bad;
+$("addBtn").disabled=bad>0||good===0;
+sync();
+}
+function sync(){
+$("paint").scrollTop=$("editor").scrollTop;
+$("paint").scrollLeft=$("editor").scrollLeft;
+}
+$("editor").addEventListener("input",check);
+$("editor").addEventListener("scroll",sync);
+function removeBad(){
+$("editor").value=$("editor").value.split("\n").filter(l=>parse(l)).join("\n");
+check();
+}
+function addOrders(){
+let lines=$("editor").value.split("\n").filter(l=>l.trim());
+let data=lines.map(parse);
+if(!data.length||data.some(p=>!p))return;
+let sums={};
+data.forEach(p=>sums[p.code]=(sums[p.code]||0)+p.qty);
+let key=codes.map(c=>c+":"+(sums[c]||0)).join("|");
+if(history.includes(key)){
+$("notice").textContent="Danh sách đã cộng trước đó!";
+return;
+}
+rows.forEach(r=>r.qty+=sums[r.code]||0);
+history.push(key);
+$("editor").value="";
+$("notice").textContent="Cộng dồn thành công!";
+save();render();check();
+}
+function render(){
+[rows.slice(0,18),rows.slice(18)].forEach((group,i)=>{
+$("table"+(i+1)).innerHTML=group.filter(r=>!filter||r.qty>0).map(r=>`
+<tr class="${r.qty>0?"active":""}">
+<td>${r.code}</td>
+<td class="price"><input type="number" min="10" max="99" value="${r.price}" onchange="update('${r.code}','price',this.value)"></td>
+<td><input type="number" min="0" value="${r.qty}" onchange="update('${r.code}','qty',this.value)"></td>
+<td>${money(r.qty*r.price*1000)}</td>
+</tr>`).join("");
+});
+let qty=rows.reduce((s,r)=>s+r.qty,0);
+let total=rows.reduce((s,r)=>s+r.qty*r.price*1000,0);
+$("bigQty").textContent=$("smallQty").textContent=qty.toLocaleString("vi-VN");
+$("bigMoney").textContent=$("smallMoney").textContent=money(total);
+}
+function update(code,field,value){
+let r=rows.find(x=>x.code===code);
+let n=Math.floor(Number(value)||0);
+r[field]=field==="price"?Math.max(10,Math.min(99,n)):Math.max(0,n);
+save();render();
+}
+function togglePrice(){
+showPrice=!showPrice;
+$("right").classList.toggle("hide-price",!showPrice);
+$("priceBtn").textContent=showPrice?"ẨN BẢNG GIÁ":"HIỆN BẢNG GIÁ";
+}
+function toggleFilter(){
+filter=!filter;
+$("filterBtn").textContent=filter?"HIỆN TẤT CẢ 35 MÃ":"CHỈ HIỆN MÃ CÓ ĐƠN";
+render();
+}
+async function copy(text){
+try{
+await navigator.clipboard.writeText(text);
+$("notice").textContent="Đã sao chép!";
+}catch(e){
+$("notice").textContent="Không sao chép được. Hãy kiểm tra quyền trình duyệt.";
+}
+}
+function copyTotal(){
+copy(rows.filter(r=>r.qty>0).map(r=>r.code+" "+r.qty+" = "+money(r.qty*r.price*1000)).join("\n")+"\nTỔNG ĐƠN: "+$("bigQty").textContent+"\nTỔNG TIỀN: "+$("bigMoney").textContent);
+}
+function copyPrices(){
+copy(rows.map(r=>r.code+" : "+r.price).join("\n"));
+}
+function resetQty(){
+if(!confirm("Xóa toàn bộ số lượng và giữ nguyên giá?"))return;
+rows.forEach(r=>r.qty=0);
+history=[];
+save();render();
+$("notice").textContent="Đã xóa số lượng, giữ nguyên giá.";
+}
+render();check();
+</script>
+</body>
+</html>
